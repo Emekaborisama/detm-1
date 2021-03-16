@@ -13,8 +13,9 @@ import sys
 import matplotlib.pyplot as plt 
 import seaborn as sns
 import scipy.io
+import json
 
-import data 
+import data
 
 from sklearn.decomposition import PCA
 from torch import nn, optim
@@ -30,13 +31,13 @@ parser.add_argument('--dataset', type=str, default='unknown', help='name of corp
 parser.add_argument('--data_path', type=str, default='./datasets/processed', help='directory containing data')
 parser.add_argument('--emb_path', type=str, default='./datasets/processed/embeddings.txt', help='directory containing embeddings')
 parser.add_argument('--save_path', type=str, default='./results', help='path to save results')
-parser.add_argument('--batch_size', type=int, default=1000, help='number of documents in a batch for training')
+parser.add_argument('--batch_size', type=int, default=500, help='number of documents in a batch for training')
 parser.add_argument('--min_df', type=int, default=100, help='to get the right data..minimum document frequency')
 
 ### model-related arguments
-parser.add_argument('--num_topics', type=int, default=50, help='number of topics')
+parser.add_argument('--num_topics', type=int, default=10, help='number of topics')
 parser.add_argument('--rho_size', type=int, default=300, help='dimension of rho')
-parser.add_argument('--emb_size', type=int, default=300, help='dimension of embeddings')
+parser.add_argument('--emb_size', type=int, default=100, help='dimension of embeddings')
 parser.add_argument('--t_hidden_size', type=int, default=800, help='dimension of hidden space of q(theta)')
 parser.add_argument('--theta_act', type=str, default='relu', help='tanh, softplus, relu, rrelu, leakyrelu, elu, selu, glu)')
 parser.add_argument('--train_embeddings', type=int, default=1, help='whether to fix rho or train it')
@@ -63,7 +64,7 @@ parser.add_argument('--bow_norm', type=int, default=1, help='normalize the bows 
 parser.add_argument('--num_words', type=int, default=20, help='number of words for topic viz')
 parser.add_argument('--log_interval', type=int, default=10, help='when to log training')
 parser.add_argument('--visualize_every', type=int, default=1, help='when to visualize results')
-parser.add_argument('--eval_batch_size', type=int, default=1000, help='input batch size for evaluation')
+parser.add_argument('--eval_batch_size', type=int, default=500, help='input batch size for evaluation')
 parser.add_argument('--load_from', type=str, default='', help='the name of the ckpt to eval from')
 parser.add_argument('--tc', type=int, default=0, help='whether to compute tc or not')
 
@@ -82,7 +83,9 @@ torch.manual_seed(args.seed)
 # 1. vocabulary
 print('Getting vocabulary ...')
 data_file = os.path.join(args.data_path, 'min_df_{}'.format(args.min_df))
-vocab, train, valid, test = data.get_data(data_file, temporal=True)
+data_file = args.data_path
+# vocab, train, valid, test = data.get_data(data_file, temporal=True)
+vocab, train, valid, test = data.get_json_data(data_file)
 vocab_size = len(vocab)
 args.vocab_size = vocab_size
 
@@ -91,7 +94,7 @@ print('Getting training data ...')
 train_tokens = train['tokens'] 
 train_counts = train['counts']
 train_times = train['times']
-args.num_times = len(np.unique(train_times))
+args.num_times = 31 # len(np.unique(train_times))
 args.num_docs_train = len(train_tokens)
 train_rnn_inp = data.get_rnn_input(
     train_tokens, train_counts, train_times, args.num_times, args.vocab_size, args.num_docs_train)
@@ -119,27 +122,31 @@ test_1_counts = test['counts_1']
 test_1_times = test_times
 args.num_docs_test_1 = len(test_1_tokens)
 test_1_rnn_inp = data.get_rnn_input(
-    test_1_tokens, test_1_counts, test_1_times, args.num_times, args.vocab_size, args.num_docs_test)
+    test_1_tokens, test_1_counts, test_1_times, args.num_times, args.vocab_size, args.num_docs_test_1)
 
 test_2_tokens = test['tokens_2']
 test_2_counts = test['counts_2']
 test_2_times = test_times
 args.num_docs_test_2 = len(test_2_tokens)
 test_2_rnn_inp = data.get_rnn_input(
-    test_2_tokens, test_2_counts, test_2_times, args.num_times, args.vocab_size, args.num_docs_test)
+    test_2_tokens, test_2_counts, test_2_times, args.num_times, args.vocab_size, args.num_docs_test_2)
 
 ## get embeddings 
 print('Getting embeddings ...')
 emb_path = args.emb_path
 vect_path = os.path.join(args.data_path.split('/')[0], 'embeddings.pkl')   
 vectors = {}
-with open(emb_path, 'rb') as f:
-    for l in f:
-        line = l.decode().split()
-        word = line[0]
-        if word in vocab:
-            vect = np.array(line[1:]).astype(np.float)
-            vectors[word] = vect
+# with open(emb_path, 'rb') as f:
+#     for l in f:
+#         line = l.decode().split()
+#         word = line[0]
+#         if word in vocab:
+#             vect = np.array(line[1:]).astype(np.float64)
+#             vectors[word] = vect
+
+with open('./datasets/processed/embedding.json', 'rb') as fp:
+    vectors = json.load(fp)
+
 embeddings = np.zeros((vocab_size, args.emb_size))
 words_found = 0
 for i, word in enumerate(vocab):
@@ -211,7 +218,7 @@ def train(epoch):
             train_tokens, train_counts, ind, args.vocab_size, args.emb_size, temporal=True, times=train_times)
         sums = data_batch.sum(1).unsqueeze(1)
         if args.bow_norm:
-            normalized_data_batch = data_batch / sums
+            normalized_data_batch = data_batch / (sums + 1e8)
         else:
             normalized_data_batch = data_batch
 
@@ -260,7 +267,7 @@ def visualize():
         print('\n')
         print('#'*100)
         print('Visualize topics...')
-        times = [0, 10, 40]
+        times = [5, 10, 15, 20]
         topics_words = []
         for k in range(args.num_topics):
             for t in times:

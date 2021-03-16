@@ -2,8 +2,10 @@ import os
 import random
 import pickle
 import numpy as np
+import pandas as pd
 import torch 
 import scipy.io
+import json
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -61,6 +63,16 @@ def _fetch_temporal(path, name):
                         'tokens_2': tokens_2, 'counts_2': counts_2} 
     return {'tokens': tokens, 'counts': counts, 'times': times}
 
+def _fetch_json_temporal(path):
+    data = pd.read_json("./datasets/processed/vaccine-forums-processed.json")
+    tokens = data['tokens'].tolist()
+    counts = data['counts'].tolist()
+    times = data['post_updated_at'].tolist()
+
+    return {'tokens': tokens, 'counts': counts, 'times': times}
+
+_fetch_json_temporal("")
+
 def get_data(path, temporal=False):
     ### load vocabulary
     with open(os.path.join(path, 'vocab.pkl'), 'rb') as f:
@@ -77,7 +89,44 @@ def get_data(path, temporal=False):
 
     return vocab, train, valid, test
 
-def get_batch(tokens, counts, ind, vocab_size, emsize=300, temporal=False, times=None):
+def get_json_data(path):
+    ### load vocabulary
+    with open(os.path.join(path, 'vocab.json'), 'rb') as f:
+        vocab = json.load(f)
+    
+    data = _fetch_json_temporal(path)
+    ### 70% training 20% validation 10% test
+    card = len(data['tokens'])
+    training_num = int(card * 0.7)
+    validation_num = int(card * 0.2)
+
+    train = dict()
+    valid = dict()
+    test = dict()
+
+    train['tokens'] = data['tokens'][:training_num]
+    train['counts'] = data['counts'][:training_num]
+    train['times'] = data['times'][:training_num]
+
+    valid['tokens'] = data['tokens'][training_num : training_num + validation_num]
+    valid['counts'] = data['counts'][training_num : training_num + validation_num]
+    valid['times'] = data['times'][training_num : training_num + validation_num]
+
+    test['tokens'] = data['tokens'][training_num + validation_num :]
+    test['counts'] = data['counts'][training_num + validation_num :]
+    test['times'] = data['times'][training_num + validation_num :]
+
+    test_num_1 = int(card * 0.05)
+    test['tokens_1'] = data['tokens'][training_num + validation_num : training_num + validation_num + test_num_1]
+    test['counts_1'] = data['counts'][training_num + validation_num : training_num + validation_num + test_num_1]
+    test['tokens_2'] = data['tokens'][training_num + validation_num + test_num_1 :]
+    test['counts_2'] = data['counts'][training_num + validation_num + test_num_1 :]
+        
+    return vocab, train, valid, test
+
+# print(get_data("./datasets/processed/vaccine-forums-processed.json"))
+
+def get_batch(tokens, counts, ind, vocab_size, emsize=100, temporal=False, times=None):
     """fetch input data by batch."""
     batch_size = len(ind)
     data_batch = np.zeros((batch_size, vocab_size))
@@ -89,13 +138,14 @@ def get_batch(tokens, counts, ind, vocab_size, emsize=300, temporal=False, times
         if temporal:
             timestamp = times[doc_id]
             times_batch[i] = timestamp
-        L = count.shape[1]
-        if len(doc) == 1: 
-            doc = [doc.squeeze()]
-            count = [count.squeeze()]
-        else:
-            doc = doc.squeeze()
-            count = count.squeeze()
+        # if len(doc) == 1: 
+        #     doc = [doc.squeeze()]
+        #     count = [count.squeeze()]
+        # else:
+        #     doc = doc.squeeze()
+        #     count = count.squeeze()
+        doc = doc
+        count = count
         if doc_id != -1:
             for j, word in enumerate(doc):
                 data_batch[i, word] = count[j]
@@ -107,7 +157,7 @@ def get_batch(tokens, counts, ind, vocab_size, emsize=300, temporal=False, times
 
 def get_rnn_input(tokens, counts, times, num_times, vocab_size, num_docs):
     indices = torch.randperm(num_docs)
-    indices = torch.split(indices, 1000) 
+    indices = torch.split(indices, 500) 
     rnn_input = torch.zeros(num_times, vocab_size).to(device)
     cnt = torch.zeros(num_times, ).to(device)
     for idx, ind in enumerate(indices):

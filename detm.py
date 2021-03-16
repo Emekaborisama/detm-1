@@ -4,7 +4,7 @@
 import torch
 import torch.nn.functional as F 
 import numpy as np 
-import math 
+import math
 
 from torch import nn
 
@@ -129,7 +129,6 @@ class DETM(nn.Module):
         hidden = self.init_hidden()
         output, _ = self.q_eta(inp, hidden)
         output = output.squeeze()
-
         etas = torch.zeros(self.num_times, self.num_topics).to(device)
         kl_eta = []
 
