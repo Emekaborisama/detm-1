@@ -133,6 +133,8 @@ def get_batch(tokens, counts, ind, vocab_size, emsize=100, temporal=False, times
     if temporal:
         times_batch = np.zeros((batch_size, ))
     for i, doc_id in enumerate(ind):
+        if doc_id >= len(tokens):
+            print(doc_id, len(tokens), i)
         doc = tokens[doc_id]
         count = counts[doc_id]
         if temporal:
@@ -169,5 +171,5 @@ def get_rnn_input(tokens, counts, times, num_times, vocab_size, num_docs):
             cnt[t] += len(tmp)
         if idx % 20 == 0:
             print('idx: {}/{}'.format(idx, len(indices)))
-    rnn_input = rnn_input / cnt.unsqueeze(1)
+    rnn_input = rnn_input / (cnt.unsqueeze(1) + 1e-8)
     return rnn_input

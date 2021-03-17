@@ -218,7 +218,7 @@ def train(epoch):
             train_tokens, train_counts, ind, args.vocab_size, args.emb_size, temporal=True, times=train_times)
         sums = data_batch.sum(1).unsqueeze(1)
         if args.bow_norm:
-            normalized_data_batch = data_batch / (sums + 1e8)
+            normalized_data_batch = data_batch / (sums + 1e-8)
         else:
             normalized_data_batch = data_batch
 
@@ -327,8 +327,8 @@ def get_eta(source):
             rnn_inp = valid_rnn_inp
             return _eta_helper(rnn_inp)
         else:
-            rnn_1_inp = test_1_rnn_inp
-            return _eta_helper(rnn_1_inp)
+            run_inp = test_rnn_inp
+            return _eta_helper(run_inp)
 
 def get_theta(eta, bows):
     model.eval()
@@ -360,7 +360,7 @@ def get_completion_ppl(source):
                     tokens, counts, ind, args.vocab_size, args.emb_size, temporal=True, times=times)
                 sums = data_batch.sum(1).unsqueeze(1)
                 if args.bow_norm:
-                    normalized_data_batch = data_batch / sums
+                    normalized_data_batch = data_batch / (sums + 1e-8)
                 else:
                     normalized_data_batch = data_batch
 
@@ -373,62 +373,101 @@ def get_completion_ppl(source):
                 loglik = torch.log(loglik)
                 nll = -loglik * data_batch
                 nll = nll.sum(-1)
-                loss = nll / sums.squeeze()
+                loss = nll / (sums.squeeze() + 1e-8)
                 loss = loss.mean().item()
                 acc_loss += loss
                 cnt += 1
             cur_loss = acc_loss / cnt
             ppl_all = round(math.exp(cur_loss), 1)
+            print(ppl_all)
             print('*'*100)
             print('{} PPL: {}'.format(source.upper(), ppl_all))
             print('*'*100)
             return ppl_all
-        else: 
+        else:
             indices = torch.split(torch.tensor(range(args.num_docs_test)), args.eval_batch_size)
-            tokens_1 = test_1_tokens
-            counts_1 = test_1_counts
+            tokens = test_tokens
+            counts = test_counts
+            times = test_times
 
-            tokens_2 = test_2_tokens
-            counts_2 = test_2_counts
-
-            eta_1 = get_eta('test')
+            eta = get_eta('test')
 
             acc_loss = 0
             cnt = 0
-            indices = torch.split(torch.tensor(range(args.num_docs_test)), args.eval_batch_size)
             for idx, ind in enumerate(indices):
-                data_batch_1, times_batch_1 = data.get_batch(
-                    tokens_1, counts_1, ind, args.vocab_size, args.emb_size, temporal=True, times=test_times)
-                sums_1 = data_batch_1.sum(1).unsqueeze(1)
+                data_batch, times_batch = data.get_batch(
+                    tokens, counts, ind, args.vocab_size, args.emb_size, temporal=True, times=times)
+                sums = data_batch.sum(1).unsqueeze(1)
                 if args.bow_norm:
-                    normalized_data_batch_1 = data_batch_1 / sums_1
+                    normalized_data_batch = data_batch / (sums + 1e-8)
                 else:
-                    normalized_data_batch_1 = data_batch_1
+                    normalized_data_batch = data_batch
 
-                eta_td_1 = eta_1[times_batch_1.type('torch.LongTensor')]
-                theta = get_theta(eta_td_1, normalized_data_batch_1)
-
-                data_batch_2, times_batch_2 = data.get_batch(
-                    tokens_2, counts_2, ind, args.vocab_size, args.emb_size, temporal=True, times=test_times)
-                sums_2 = data_batch_2.sum(1).unsqueeze(1)
-
-                alpha_td = alpha[:, times_batch_2.type('torch.LongTensor'), :]
+                eta_td = eta[times_batch.type('torch.LongTensor')]
+                theta = get_theta(eta_td, normalized_data_batch)
+                alpha_td = alpha[:, times_batch.type('torch.LongTensor'), :]
                 beta = model.get_beta(alpha_td).permute(1, 0, 2)
                 loglik = theta.unsqueeze(2) * beta
                 loglik = loglik.sum(1)
                 loglik = torch.log(loglik)
-                nll = -loglik * data_batch_2
+                nll = -loglik * data_batch
                 nll = nll.sum(-1)
-                loss = nll / sums_2.squeeze()
+                loss = nll / (sums.squeeze() + 1e-8)
                 loss = loss.mean().item()
                 acc_loss += loss
                 cnt += 1
             cur_loss = acc_loss / cnt
             ppl_dc = round(math.exp(cur_loss), 1)
+            print(ppl_dc)
             print('*'*100)
             print('{} Doc Completion PPL: {}'.format(source.upper(), ppl_dc))
             print('*'*100)
             return ppl_dc
+            # indices = torch.split(torch.tensor(range(args.num_docs_test)), args.eval_batch_size)
+            # tokens_1 = test_1_tokens
+            # counts_1 = test_1_counts
+
+            # tokens_2 = test_2_tokens
+            # counts_2 = test_2_counts
+
+            # eta_1 = get_eta('test')
+
+            # acc_loss = 0
+            # cnt = 0
+            # indices = torch.split(torch.tensor(range(args.num_docs_test)), args.eval_batch_size)
+            # for idx, ind in enumerate(indices):
+            #     data_batch_1, times_batch_1 = data.get_batch(
+            #         tokens_1, counts_1, ind, args.vocab_size, args.emb_size, temporal=True, times=test_times)
+            #     sums_1 = data_batch_1.sum(1).unsqueeze(1)
+            #     if args.bow_norm:
+            #         normalized_data_batch_1 = data_batch_1 / (sums_1 + 1e-8)
+            #     else:
+            #         normalized_data_batch_1 = data_batch_1
+
+            #     eta_td_1 = eta_1[times_batch_1.type('torch.LongTensor')]
+            #     theta = get_theta(eta_td_1, normalized_data_batch_1)
+
+            #     data_batch_2, times_batch_2 = data.get_batch(
+            #         tokens_2, counts_2, ind, args.vocab_size, args.emb_size, temporal=True, times=test_times)
+            #     sums_2 = data_batch_2.sum(1).unsqueeze(1)
+
+            #     alpha_td = alpha[:, times_batch_2.type('torch.LongTensor'), :]
+            #     beta = model.get_beta(alpha_td).permute(1, 0, 2)
+            #     loglik = theta.unsqueeze(2) * beta
+            #     loglik = loglik.sum(1)
+            #     loglik = torch.log(loglik)
+            #     nll = -loglik * data_batch_2
+            #     nll = nll.sum(-1)
+            #     loss = nll / (sums_2.squeeze() + 1e-8)
+            #     loss = loss.mean().item()
+            #     acc_loss += loss
+            #     cnt += 1
+            # cur_loss = acc_loss / cnt
+            # ppl_dc = round(math.exp(cur_loss), 1)
+            # print('*'*100)
+            # print('{} Doc Completion PPL: {}'.format(source.upper(), ppl_dc))
+            # print('*'*100)
+            # return ppl_dc
 
 def _diversity_helper(beta, num_tops):
     list_w = np.zeros((args.num_topics, num_tops))
