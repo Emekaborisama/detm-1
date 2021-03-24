@@ -9,7 +9,7 @@ logs/
 results/
 
 # Word2Vec
-word2vec.model
+.word2vec.model
 
 # Editors
 .vscode

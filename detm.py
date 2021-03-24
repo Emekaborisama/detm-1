@@ -50,14 +50,39 @@ class DETM(nn.Module):
                     nn.Linear(args.t_hidden_size, args.t_hidden_size),
                     self.theta_act,
                 )
-        self.mu_q_theta = nn.Linear(args.t_hidden_size, args.num_topics, bias=True)
-        self.logsigma_q_theta = nn.Linear(args.t_hidden_size, args.num_topics, bias=True)
+        self.mu_q_theta = nn.Sequential(
+                    nn.Linear(args.t_hidden_size, args.t_hidden_size, bias=True), 
+                    self.theta_act,
+                    nn.Linear(args.t_hidden_size, args.num_topics, bias=True)
+                )
+        #nn.Linear(args.t_hidden_size, args.num_topics, bias=True)
+        self.logsigma_q_theta = nn.Sequential(
+                    nn.Linear(args.t_hidden_size, args.t_hidden_size, bias=True), 
+                    self.theta_act,
+                    nn.Linear(args.t_hidden_size, args.num_topics, bias=True)
+                )
+        #nn.Linear(args.t_hidden_size, args.num_topics, bias=True)
 
         ## define variational distribution for \eta via amortizartion... eta is K x T
-        self.q_eta_map = nn.Linear(args.vocab_size, args.eta_hidden_size)
+        self.q_eta_map = nn.Sequential(
+                    nn.Linear(args.vocab_size, args.vocab_size), 
+                    self.theta_act,
+                    nn.Linear(args.vocab_size, args.eta_hidden_size)
+                )
+        #nn.Linear(args.vocab_size, args.eta_hidden_size)
         self.q_eta = nn.LSTM(args.eta_hidden_size, args.eta_hidden_size, args.eta_nlayers, dropout=args.eta_dropout)
-        self.mu_q_eta = nn.Linear(args.eta_hidden_size+args.num_topics, args.num_topics, bias=True)
-        self.logsigma_q_eta = nn.Linear(args.eta_hidden_size+args.num_topics, args.num_topics, bias=True)
+        self.mu_q_eta = nn.Sequential(
+                    nn.Linear(args.eta_hidden_size+args.num_topics, args.eta_hidden_size+args.num_topics, bias=True), 
+                    self.theta_act,
+                    nn.Linear(args.eta_hidden_size+args.num_topics, args.num_topics, bias=True)
+                )
+        #nn.Linear(args.eta_hidden_size+args.num_topics, args.num_topics, bias=True)
+        self.logsigma_q_eta = nn.Sequential(
+                    nn.Linear(args.eta_hidden_size+args.num_topics, args.eta_hidden_size+args.num_topics, bias=True), 
+                    self.theta_act,
+                    nn.Linear(args.eta_hidden_size+args.num_topics, args.num_topics, bias=True)
+                )
+        #nn.Linear(args.eta_hidden_size+args.num_topics, args.num_topics, bias=True)
 
     def get_activation(self, act):
         if act == 'tanh':

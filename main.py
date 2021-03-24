@@ -31,12 +31,12 @@ parser.add_argument('--dataset', type=str, default='unknown', help='name of corp
 parser.add_argument('--data_path', type=str, default='./datasets/processed', help='directory containing data')
 parser.add_argument('--emb_path', type=str, default='./datasets/processed/embeddings.txt', help='directory containing embeddings')
 parser.add_argument('--save_path', type=str, default='./results', help='path to save results')
-parser.add_argument('--batch_size', type=int, default=500, help='number of documents in a batch for training')
+parser.add_argument('--batch_size', type=int, default=256, help='number of documents in a batch for training')
 parser.add_argument('--min_df', type=int, default=100, help='to get the right data..minimum document frequency')
 
 ### model-related arguments
 parser.add_argument('--num_topics', type=int, default=10, help='number of topics')
-parser.add_argument('--rho_size', type=int, default=300, help='dimension of rho')
+parser.add_argument('--rho_size', type=int, default=100, help='dimension of rho')
 parser.add_argument('--emb_size', type=int, default=100, help='dimension of embeddings')
 parser.add_argument('--t_hidden_size', type=int, default=800, help='dimension of hidden space of q(theta)')
 parser.add_argument('--theta_act', type=str, default='relu', help='tanh, softplus, relu, rrelu, leakyrelu, elu, selu, glu)')
@@ -63,8 +63,8 @@ parser.add_argument('--bow_norm', type=int, default=1, help='normalize the bows 
 ### evaluation, visualization, and logging-related arguments
 parser.add_argument('--num_words', type=int, default=20, help='number of words for topic viz')
 parser.add_argument('--log_interval', type=int, default=10, help='when to log training')
-parser.add_argument('--visualize_every', type=int, default=1, help='when to visualize results')
-parser.add_argument('--eval_batch_size', type=int, default=500, help='input batch size for evaluation')
+parser.add_argument('--visualize_every', type=int, default=10, help='when to visualize results')
+parser.add_argument('--eval_batch_size', type=int, default=256, help='input batch size for evaluation')
 parser.add_argument('--load_from', type=str, default='', help='the name of the ckpt to eval from')
 parser.add_argument('--tc', type=int, default=0, help='whether to compute tc or not')
 
@@ -94,7 +94,7 @@ print('Getting training data ...')
 train_tokens = train['tokens'] 
 train_counts = train['counts']
 train_times = train['times']
-args.num_times = 31 # len(np.unique(train_times))
+args.num_times = 24 # len(np.unique(train_times))
 args.num_docs_train = len(train_tokens)
 train_rnn_inp = data.get_rnn_input(
     train_tokens, train_counts, train_times, args.num_times, args.vocab_size, args.num_docs_train)
@@ -154,7 +154,7 @@ for i, word in enumerate(vocab):
         embeddings[i] = vectors[word]
         words_found += 1
     except KeyError:
-        embeddings[i] = np.random.normal(scale=0.6, size=(args.emb_size, ))
+        exit(1) # embeddings[i] = np.random.normal(scale=1.0, size=(args.emb_size, ))
 embeddings = torch.from_numpy(embeddings).to(device)
 args.embeddings_dim = embeddings.size()
 
