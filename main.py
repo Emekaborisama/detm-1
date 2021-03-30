@@ -22,7 +22,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 
 from detm import DETM
-from utils import nearest_neighbors, get_topic_coherence
+from utils import nearest_neighbors, get_topic_coherence, printProgressBar
 
 parser = argparse.ArgumentParser(description='The Embedded Topic Model')
 
@@ -63,7 +63,7 @@ parser.add_argument('--bow_norm', type=int, default=1, help='normalize the bows 
 ### evaluation, visualization, and logging-related arguments
 parser.add_argument('--num_words', type=int, default=20, help='number of words for topic viz')
 parser.add_argument('--log_interval', type=int, default=10, help='when to log training')
-parser.add_argument('--visualize_every', type=int, default=10, help='when to visualize results')
+parser.add_argument('--visualize_every', type=int, default=1, help='when to visualize results')
 parser.add_argument('--eval_batch_size', type=int, default=256, help='input batch size for evaluation')
 parser.add_argument('--load_from', type=str, default='', help='the name of the ckpt to eval from')
 parser.add_argument('--tc', type=int, default=0, help='whether to compute tc or not')
@@ -94,7 +94,7 @@ print('Getting training data ...')
 train_tokens = train['tokens'] 
 train_counts = train['counts']
 train_times = train['times']
-args.num_times = 24 # len(np.unique(train_times))
+args.num_times = 6 # len(np.unique(train_times))
 args.num_docs_train = len(train_tokens)
 train_rnn_inp = data.get_rnn_input(
     train_tokens, train_counts, train_times, args.num_times, args.vocab_size, args.num_docs_train)
@@ -149,12 +149,12 @@ with open('./datasets/processed/embedding.json', 'rb') as fp:
 
 embeddings = np.zeros((vocab_size, args.emb_size))
 words_found = 0
-for i, word in enumerate(vocab):
-    try: 
-        embeddings[i] = vectors[word]
-        words_found += 1
-    except KeyError:
-        exit(1) # embeddings[i] = np.random.normal(scale=1.0, size=(args.emb_size, ))
+# for i, word in enumerate(vocab):
+#     try: 
+#         embeddings[i] = vectors[word]
+#         words_found += 1
+#     except KeyError:
+#         exit(1) # embeddings[i] = np.random.normal(scale=1.0, size=(args.emb_size, ))
 embeddings = torch.from_numpy(embeddings).to(device)
 args.embeddings_dim = embeddings.size()
 
@@ -267,7 +267,7 @@ def visualize():
         print('\n')
         print('#'*100)
         print('Visualize topics...')
-        times = [5, 10, 15, 20]
+        times = [0, 1, 2, 3, 4, 5]
         topics_words = []
         for k in range(args.num_topics):
             for t in times:
