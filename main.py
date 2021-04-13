@@ -94,7 +94,7 @@ print('Getting training data ...')
 train_tokens = train['tokens'] 
 train_counts = train['counts']
 train_times = train['times']
-args.num_times = 6 # len(np.unique(train_times))
+args.num_times = 25 # len(np.unique(train_times))
 args.num_docs_train = len(train_tokens)
 train_rnn_inp = data.get_rnn_input(
     train_tokens, train_counts, train_times, args.num_times, args.vocab_size, args.num_docs_train)
@@ -267,7 +267,7 @@ def visualize():
         print('\n')
         print('#'*100)
         print('Visualize topics...')
-        times = [0, 1, 2, 3, 4, 5]
+        times = [10 + i for i in range(15)]
         topics_words = []
         for k in range(args.num_topics):
             for t in times:
@@ -337,7 +337,13 @@ def get_theta(eta, bows):
         q_theta = model.q_theta(inp)
         mu_theta = model.mu_q_theta(q_theta)
         theta = F.softmax(mu_theta, dim=-1)
-        return theta    
+        return theta
+
+def visualize_eta():
+    model.eval()
+    with torch.no_grad():
+            run_inp = train_rnn_inp
+            return _eta_helper(run_inp)
 
 def get_completion_ppl(source):
     """Returns document completion perplexity.
@@ -514,7 +520,7 @@ def get_topic_quality():
         print('TC_all: ', TC_all.size())
         print('\n')
         print('Get topic quality...')
-        quality = tc * diversity
+        quality = torch.mean(TC_all) * TD
         print('Topic Quality is: {}'.format(quality))
         print('#'*100)
 
@@ -557,7 +563,8 @@ if args.mode == 'train':
         val_ppl = get_completion_ppl('val')
         print('computing test perplexity...')
         test_ppl = get_completion_ppl('test')
-else: 
+else:
+    print(ckpt)
     with open(ckpt, 'rb') as f:
         model = torch.load(f)
     model = model.to(device)
@@ -566,6 +573,36 @@ else:
     with torch.no_grad():
         alpha = model.mu_q_alpha.cpu().numpy()
         scipy.io.savemat(ckpt+'_alpha.mat', {'values': alpha}, do_compression=True)
+
+    occurances = [np.zeros((10,)) for _ in range(25)]
+
+    model.eval()
+    with torch.no_grad():
+        alpha = model.mu_q_alpha
+        beta = model.get_beta(alpha)
+
+        indices = torch.split(torch.tensor(range(args.num_docs_train)), args.eval_batch_size)
+        eta = visualize_eta()
+
+        for idx, ind in enumerate(indices):
+            data_batch, times_batch = data.get_batch(train_tokens, train_counts, ind, args.vocab_size, args.emb_size, temporal=True, times=train_times)
+
+            eta_td = eta[times_batch.type('torch.LongTensor')]
+            times_batch = times_batch.cpu().detach().numpy()
+            theta = get_theta(eta_td, data_batch).cpu().detach().numpy()
+            for i in range(theta.shape[0]):
+                occurances[int(times_batch[i])] += theta[i, :]
+    
+    for i in range(25):
+        occurances[i] = (occurances[i] / np.sum(occurances[i])).tolist()
+
+    for i in range(10):
+        plt.plot([t[i] for t in occurances], label='topic '+str(i))
+    plt.legend()
+    plt.savefig("vis.png")
+    plt.show()
+
+    exit()
 
     print('computing validation perplexity...')
     val_ppl = get_completion_ppl('val')

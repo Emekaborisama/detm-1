@@ -64,14 +64,13 @@ def _fetch_temporal(path, name):
     return {'tokens': tokens, 'counts': counts, 'times': times}
 
 def _fetch_json_temporal(path):
-    data = pd.read_json("./datasets/processed/vaccine-merged-processed.json")
+    data = pd.read_json("./datasets/processed/IndianNews-minified-processed.json")
+    data.sample(frac=1)
     tokens = data['tokens'].tolist()
     counts = data['counts'].tolist()
     times = data['post_updated_at'].tolist()
 
     return {'tokens': tokens, 'counts': counts, 'times': times}
-
-_fetch_json_temporal("")
 
 def get_data(path, temporal=False):
     ### load vocabulary
