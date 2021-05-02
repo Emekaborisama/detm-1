@@ -9,84 +9,14 @@ import json
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def _fetch(path, name):
-    if name == 'train':
-        token_file = os.path.join(path, 'bow_tr_tokens.mat')
-        count_file = os.path.join(path, 'bow_tr_counts.mat')
-    elif name == 'valid':
-        token_file = os.path.join(path, 'bow_va_tokens.mat')
-        count_file = os.path.join(path, 'bow_va_counts.mat')
-    else:
-        token_file = os.path.join(path, 'bow_ts_tokens.mat')
-        count_file = os.path.join(path, 'bow_ts_counts.mat')
-    tokens = scipy.io.loadmat(token_file)['tokens'].squeeze()
-    counts = scipy.io.loadmat(count_file)['counts'].squeeze()
-    if name == 'test':
-        token_1_file = os.path.join(path, 'bow_ts_h1_tokens.mat')
-        count_1_file = os.path.join(path, 'bow_ts_h1_counts.mat')
-        token_2_file = os.path.join(path, 'bow_ts_h2_tokens.mat')
-        count_2_file = os.path.join(path, 'bow_ts_h2_counts.mat')
-        tokens_1 = scipy.io.loadmat(token_1_file)['tokens'].squeeze()
-        counts_1 = scipy.io.loadmat(count_1_file)['counts'].squeeze()
-        tokens_2 = scipy.io.loadmat(token_2_file)['tokens'].squeeze()
-        counts_2 = scipy.io.loadmat(count_2_file)['counts'].squeeze()
-        return {'tokens': tokens, 'counts': counts, 'tokens_1': tokens_1, 'counts_1': counts_1, 'tokens_2': tokens_2, 'counts_2': counts_2}
-    return {'tokens': tokens, 'counts': counts}
-
-def _fetch_temporal(path, name):
-    if name == 'train':
-        token_file = os.path.join(path, 'bow_tr_tokens.mat')
-        count_file = os.path.join(path, 'bow_tr_counts.mat')
-        time_file = os.path.join(path, 'bow_tr_timestamps.mat')
-    elif name == 'valid':
-        token_file = os.path.join(path, 'bow_va_tokens.mat')
-        count_file = os.path.join(path, 'bow_va_counts.mat')
-        time_file = os.path.join(path, 'bow_va_timestamps.mat')
-    else:
-        token_file = os.path.join(path, 'bow_ts_tokens.mat')
-        count_file = os.path.join(path, 'bow_ts_counts.mat')
-        time_file = os.path.join(path, 'bow_ts_timestamps.mat')
-    tokens = scipy.io.loadmat(token_file)['tokens'].squeeze()
-    counts = scipy.io.loadmat(count_file)['counts'].squeeze()
-    times = scipy.io.loadmat(time_file)['timestamps'].squeeze()
-    if name == 'test':
-        token_1_file = os.path.join(path, 'bow_ts_h1_tokens.mat')
-        count_1_file = os.path.join(path, 'bow_ts_h1_counts.mat')
-        token_2_file = os.path.join(path, 'bow_ts_h2_tokens.mat')
-        count_2_file = os.path.join(path, 'bow_ts_h2_counts.mat')
-        tokens_1 = scipy.io.loadmat(token_1_file)['tokens'].squeeze()
-        counts_1 = scipy.io.loadmat(count_1_file)['counts'].squeeze()
-        tokens_2 = scipy.io.loadmat(token_2_file)['tokens'].squeeze()
-        counts_2 = scipy.io.loadmat(count_2_file)['counts'].squeeze()
-        return {'tokens': tokens, 'counts': counts, 'times': times, 
-                    'tokens_1': tokens_1, 'counts_1': counts_1, 
-                        'tokens_2': tokens_2, 'counts_2': counts_2} 
-    return {'tokens': tokens, 'counts': counts, 'times': times}
-
 def _fetch_json_temporal(path):
     data = pd.read_json("./datasets/processed/IndianNews-minified-processed.json")
-    data.sample(frac=1)
+    data = data.sample(frac=1).reset_index(drop=True)
     tokens = data['tokens'].tolist()
     counts = data['counts'].tolist()
     times = data['post_updated_at'].tolist()
 
     return {'tokens': tokens, 'counts': counts, 'times': times}
-
-def get_data(path, temporal=False):
-    ### load vocabulary
-    with open(os.path.join(path, 'vocab.pkl'), 'rb') as f:
-        vocab = pickle.load(f)
-
-    if not temporal:
-        train = _fetch(path, 'train')
-        valid = _fetch(path, 'valid')
-        test = _fetch(path, 'test')
-    else:
-        train = _fetch_temporal(path, 'train')
-        valid = _fetch_temporal(path, 'valid')
-        test = _fetch_temporal(path, 'test')
-
-    return vocab, train, valid, test
 
 def get_json_data(path):
     ### load vocabulary
@@ -123,8 +53,6 @@ def get_json_data(path):
         
     return vocab, train, valid, test
 
-# print(get_data("./datasets/processed/vaccine-forums-processed.json"))
-
 def get_batch(tokens, counts, ind, vocab_size, emsize=100, temporal=False, times=None):
     """fetch input data by batch."""
     batch_size = len(ind)
@@ -139,12 +67,6 @@ def get_batch(tokens, counts, ind, vocab_size, emsize=100, temporal=False, times
         if temporal:
             timestamp = times[doc_id]
             times_batch[i] = timestamp
-        # if len(doc) == 1: 
-        #     doc = [doc.squeeze()]
-        #     count = [count.squeeze()]
-        # else:
-        #     doc = doc.squeeze()
-        #     count = count.squeeze()
         doc = doc
         count = count
         if doc_id != -1:

@@ -24,6 +24,9 @@ from torch.nn import functional as F
 from detm import DETM
 from utils import nearest_neighbors, get_topic_coherence, printProgressBar
 
+import pandas as pd
+import plotly.express as px
+
 parser = argparse.ArgumentParser(description='The Embedded Topic Model')
 
 ### data and file related arguments
@@ -46,8 +49,8 @@ parser.add_argument('--eta_hidden_size', type=int, default=200, help='number of 
 parser.add_argument('--delta', type=float, default=0.005, help='prior variance')
 
 ### optimization-related arguments
-parser.add_argument('--lr', type=float, default=0.005, help='learning rate')
-parser.add_argument('--lr_factor', type=float, default=4.0, help='divide learning rate by this')
+parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
+parser.add_argument('--lr_factor', type=float, default=1.0, help='divide learning rate by this')
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train')
 parser.add_argument('--mode', type=str, default='train', help='train or eval model')
 parser.add_argument('--optimizer', type=str, default='adam', help='choice of optimizer')
@@ -136,25 +139,18 @@ print('Getting embeddings ...')
 emb_path = args.emb_path
 vect_path = os.path.join(args.data_path.split('/')[0], 'embeddings.pkl')   
 vectors = {}
-# with open(emb_path, 'rb') as f:
-#     for l in f:
-#         line = l.decode().split()
-#         word = line[0]
-#         if word in vocab:
-#             vect = np.array(line[1:]).astype(np.float64)
-#             vectors[word] = vect
 
-with open('./datasets/processed/embedding.json', 'rb') as fp:
+with open('./datasets/processed/embedding_fasttext.json', 'rb') as fp:
     vectors = json.load(fp)
 
 embeddings = np.zeros((vocab_size, args.emb_size))
 words_found = 0
-# for i, word in enumerate(vocab):
-#     try: 
-#         embeddings[i] = vectors[word]
-#         words_found += 1
-#     except KeyError:
-#         exit(1) # embeddings[i] = np.random.normal(scale=1.0, size=(args.emb_size, ))
+for i, word in enumerate(vocab):
+    try: 
+        embeddings[i] = vectors[word]
+        words_found += 1
+    except KeyError:
+        exit(1) # embeddings[i] = np.random.normal(scale=1.0, size=(args.emb_size, ))
 embeddings = torch.from_numpy(embeddings).to(device)
 args.embeddings_dim = embeddings.size()
 
@@ -267,7 +263,7 @@ def visualize():
         print('\n')
         print('#'*100)
         print('Visualize topics...')
-        times = [10 + i for i in range(15)]
+        times = [i for i in range(25)]
         topics_words = []
         for k in range(args.num_topics):
             for t in times:
@@ -278,6 +274,8 @@ def visualize():
                 print('Topic {} .. Time: {} ===> {}'.format(k, t, topic_words)) 
 
         print('\n')
+
+        """
         print('Visualize word embeddings ...')
         queries = ['economic', 'assembly', 'security', 'management', 'debt', 'rights',  'africa']
         try:
@@ -285,27 +283,51 @@ def visualize():
         except:
             embeddings = model.rho         # Vocab_size x E
         neighbors = []
-        for word in queries:
+        for word in queries:  
             print('word: {} .. neighbors: {}'.format(
                 word, nearest_neighbors(word, embeddings, vocab, args.num_words)))
         print('#'*100)
+        """
 
-        # print('\n')
-        # print('Visualize word evolution ...')
-        # topic_0 = None ### k 
-        # queries_0 = ['woman', 'gender', 'man', 'mankind', 'humankind'] ### v 
+        acc_loss = 0
+        acc_nll = 0
+        acc_kl_theta_loss = 0
+        acc_kl_eta_loss = 0
+        acc_kl_alpha_loss = 0
+        cnt = 0
+        indices = torch.randperm(args.num_docs_valid)
+        indices = torch.split(indices, args.batch_size) 
+        for idx, ind in enumerate(indices):
+            data_batch, times_batch = data.get_batch(
+                valid_tokens, valid_counts, ind, args.vocab_size, args.emb_size, temporal=True, times=valid_times)
+            sums = data_batch.sum(1).unsqueeze(1)
+            if args.bow_norm:
+                normalized_data_batch = data_batch / (sums + 1e-8)
+            else:
+                normalized_data_batch = data_batch
 
-        # topic_1 = None
-        # queries_1 = ['africa', 'colonial', 'racist', 'democratic']
+            loss, nll, kl_alpha, kl_eta, kl_theta = model(data_batch, normalized_data_batch, times_batch, valid_rnn_inp, args.num_docs_valid)
 
-        # topic_2 = None
-        # queries_2 = ['poverty', 'sustainable', 'trade']
+            acc_loss += torch.sum(loss).item()
+            acc_nll += torch.sum(nll).item()
+            acc_kl_theta_loss += torch.sum(kl_theta).item()
+            acc_kl_eta_loss += torch.sum(kl_eta).item()
+            acc_kl_alpha_loss += torch.sum(kl_alpha).item()
+            cnt += 1
 
-        # topic_3 = None
-        # queries_3 = ['soviet', 'convention', 'iran']
-
-        # topic_4 = None # climate
-        # queries_4 = ['environment', 'impact', 'threats', 'small', 'global', 'climate']
+            if idx % args.log_interval == 0 and idx > 0:
+                cur_loss = round(acc_loss / cnt, 2) 
+                cur_nll = round(acc_nll / cnt, 2) 
+                cur_kl_theta = round(acc_kl_theta_loss / cnt, 2) 
+                cur_kl_eta = round(acc_kl_eta_loss / cnt, 2) 
+                cur_kl_alpha = round(acc_kl_alpha_loss / cnt, 2) 
+                
+        cur_loss = round(acc_loss / cnt, 2) 
+        cur_nll = round(acc_nll / cnt, 2) 
+        cur_kl_theta = round(acc_kl_theta_loss / cnt, 2) 
+        cur_kl_eta = round(acc_kl_eta_loss / cnt, 2) 
+        cur_kl_alpha = round(acc_kl_alpha_loss / cnt, 2) 
+        lr = optimizer.param_groups[0]['lr']
 
 def _eta_helper(rnn_inp):
     inp = model.q_eta_map(rnn_inp).unsqueeze(1)
@@ -429,51 +451,6 @@ def get_completion_ppl(source):
             print('{} Doc Completion PPL: {}'.format(source.upper(), ppl_dc))
             print('*'*100)
             return ppl_dc
-            # indices = torch.split(torch.tensor(range(args.num_docs_test)), args.eval_batch_size)
-            # tokens_1 = test_1_tokens
-            # counts_1 = test_1_counts
-
-            # tokens_2 = test_2_tokens
-            # counts_2 = test_2_counts
-
-            # eta_1 = get_eta('test')
-
-            # acc_loss = 0
-            # cnt = 0
-            # indices = torch.split(torch.tensor(range(args.num_docs_test)), args.eval_batch_size)
-            # for idx, ind in enumerate(indices):
-            #     data_batch_1, times_batch_1 = data.get_batch(
-            #         tokens_1, counts_1, ind, args.vocab_size, args.emb_size, temporal=True, times=test_times)
-            #     sums_1 = data_batch_1.sum(1).unsqueeze(1)
-            #     if args.bow_norm:
-            #         normalized_data_batch_1 = data_batch_1 / (sums_1 + 1e-8)
-            #     else:
-            #         normalized_data_batch_1 = data_batch_1
-
-            #     eta_td_1 = eta_1[times_batch_1.type('torch.LongTensor')]
-            #     theta = get_theta(eta_td_1, normalized_data_batch_1)
-
-            #     data_batch_2, times_batch_2 = data.get_batch(
-            #         tokens_2, counts_2, ind, args.vocab_size, args.emb_size, temporal=True, times=test_times)
-            #     sums_2 = data_batch_2.sum(1).unsqueeze(1)
-
-            #     alpha_td = alpha[:, times_batch_2.type('torch.LongTensor'), :]
-            #     beta = model.get_beta(alpha_td).permute(1, 0, 2)
-            #     loglik = theta.unsqueeze(2) * beta
-            #     loglik = loglik.sum(1)
-            #     loglik = torch.log(loglik)
-            #     nll = -loglik * data_batch_2
-            #     nll = nll.sum(-1)
-            #     loss = nll / (sums_2.squeeze() + 1e-8)
-            #     loss = loss.mean().item()
-            #     acc_loss += loss
-            #     cnt += 1
-            # cur_loss = acc_loss / cnt
-            # ppl_dc = round(math.exp(cur_loss), 1)
-            # print('*'*100)
-            # print('{} Doc Completion PPL: {}'.format(source.upper(), ppl_dc))
-            # print('*'*100)
-            # return ppl_dc
 
 def _diversity_helper(beta, num_tops):
     list_w = np.zeros((args.num_topics, num_tops))
@@ -596,11 +573,23 @@ else:
     for i in range(25):
         occurances[i] = (occurances[i] / np.sum(occurances[i])).tolist()
 
-    for i in range(10):
-        plt.plot([t[i] for t in occurances], label='topic '+str(i))
-    plt.legend()
-    plt.savefig("vis.png")
-    plt.show()
+    d = {'Time': [], 'Topic': [], 'Popularity': []}
+    for i in range(25):
+        for k in range(10):
+            d['Time'].append(i)
+            d['Topic'].append(k)
+            d['Popularity'].append(occurances[i][k])
+    df = pd.DataFrame(d)
+
+    fig = px.bar(df, x='Time', y='Popularity', color='Topic', title='Topics Over Time')
+    fig.show()
+
+    # for i in range(10):
+    #     plt.plot([t[i] for t in occurances], label='topic '+str(i))
+    # # visualize()
+    # plt.legend()
+    # plt.savefig("vis_brazil.png")
+    # plt.show()
 
     exit()
 
